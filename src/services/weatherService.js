@@ -4,6 +4,15 @@ const CACHE_TTL_MS = 60 * 1000;
 
 const cache = new Map();
 
+class WeatherError extends Error {
+  constructor(type, message, extra = {}) {
+    super(message);
+    this.name = 'WeatherError';
+    this.type = type;
+    Object.assign(this, extra);
+  }
+}
+
 function buildUrl(path, params) {
   const { baseUrl, apiKey } = getWeatherConfig();
   const url = new URL(path, baseUrl);
@@ -75,10 +84,7 @@ function setCached(city, data) {
 
 export async function fetchWeather(city, options = {}) {
   if (!city) {
-    throw {
-      type: 'validation',
-      message: 'City is required.',
-    };
+    throw new WeatherError('validation', 'City is required.');
   }
 
   const cached = getCached(city);
@@ -98,15 +104,13 @@ export async function fetchWeather(city, options = {}) {
     ]);
 
     if (!currentRes.ok || !forecastRes.ok) {
-      const error = {
-        type: 'http',
-        status: currentRes.ok ? forecastRes.status : currentRes.status,
-        message:
-          currentRes.status === 404 || forecastRes.status === 404
-            ? 'City not found. Please try another city.'
-            : 'Unable to fetch weather data. Please try again later.',
-      };
-      throw error;
+      const status = currentRes.ok ? forecastRes.status : currentRes.status;
+      const message =
+        currentRes.status === 404 || forecastRes.status === 404
+          ? 'City not found. Please try another city.'
+          : 'Unable to fetch weather data. Please try again later.';
+
+      throw new WeatherError('http', message, { status });
     }
 
     const currentJson = await currentRes.json();
@@ -130,11 +134,9 @@ export async function fetchWeather(city, options = {}) {
     }
 
     if (!err.type) {
-      throw {
-        type: 'network',
-        message: 'Network error while fetching weather data.',
+      throw new WeatherError('network', 'Network error while fetching weather data.', {
         originalError: err,
-      };
+      });
     }
 
     throw err;
